@@ -1,59 +1,47 @@
-//function sendMessage() {
-//   const input = document.getElementById('input');
-//   const message = input.value;
-//   input.value = '';
-//
-//   const messages = document.getElementById('chat-container');
-//   const userMessage = document.createElement('div');
-//   userMessage.textContent = 'You: ' + message;
-//   userMessage.className = 'message user-message';
-//   messages.appendChild(userMessage);
-//
-//   // 显示用户消息
-//   setTimeout(() => userMessage.classList.add('show'), 10);
-//
-//   axios.post('/chat', { message: message })
-//       .then(response => {
-//           const aiMessage = document.createElement('div');
-//           aiMessage.textContent = 'AI: ' + response.data.response;
-//           aiMessage.className = 'message ai-message';
-//           messages.appendChild(aiMessage);
-//
-//           // 显示AI消息
-//           setTimeout(() => aiMessage.classList.add('show'), 10);
-//       })
-//       .catch(error => {
-//           console.error(error);
-//       })
-//       .finally(() => {
-//           // 滚动到底部
-//           messages.scrollTop = messages.scrollHeight;
-//       });
-//}
-// 初始化语音识别
-const recognition = new SpeechRecognition();
-recognition.lang = 'en-US'; // 设置为英文
-recognition.interimResults = true; // 设置为true，以便在识别中显示中间结果
+// 初始化语音识别对象
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (!SpeechRecognition) {
+    console.error("This browser does not support SpeechRecognition.");
+} else {
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'zh-CN'; // 设置为中文
+    recognition.interimResults = true; // 设置为true，以便在识别中显示中间结果
 
-// 开始语音识别
-function startVoiceRecognition() {
-    recognition.start();
-}
+    let recognizing = false;
+    let finalTranscript = '';
 
-// 语音识别回调函数
-recognition.onresult = function(event) {
-    const interimTranscript = '';
-    for (let i = event.resultIndex; i < event.results.length; ++i) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-            const input = document.getElementById('input');
-            input.value += transcript;
-            sendMessage(); // 发送消息到后端
-        } else {
-            interimTranscript += transcript;
+    // 开始语音识别
+    function startVoiceRecognition() {
+        if (!recognizing) {
+            recognition.start();
+            recognizing = true;
         }
     }
-};
+
+    // 语音识别回调函数
+    recognition.onresult = function(event) {
+        let interimTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+                finalTranscript += transcript;
+            } else {
+                interimTranscript += transcript;
+            }
+        }
+        const input = document.getElementById('input');
+        input.value = finalTranscript + interimTranscript; // 实时更新文本框
+    };
+
+    recognition.onend = function() {
+        recognizing = false;
+    };
+
+    recognition.onerror = function(event) {
+        console.error("SpeechRecognition error", event.error);
+        recognizing = false;
+    };
+}
 
 // 发送消息到后端
 function sendMessage() {
@@ -63,8 +51,8 @@ function sendMessage() {
 
     // 创建一个对话记录对象
     const chatRecord = {
-        user_id: 'user_id', // 需要替换为实际的用户ID
-        ai_id: 'ai_id', // 需要替换为实际的AI ID
+        user_id: 'default_user', // 默认用户ID
+        ai_id: 'default_ai', // 默认AI ID
         content: message,
         timestamp: new Date().toISOString()
     };
@@ -99,6 +87,8 @@ function saveChatRecord(chatRecord) {
     axios.post('/chat/record', chatRecord)
         .then(response => {
             console.log('Chat record saved successfully:', response.data);
+            // 重新加载历史记录
+            loadHistory();
         })
         .catch(error => {
             console.error('Failed to save chat record:', error);
@@ -129,8 +119,64 @@ function displayChatHistory(records) {
 
     records.forEach(record => {
         const messageElement = document.createElement('div');
-        messageElement.textContent = record.content;
+        messageElement.textContent = record.content; // 确保显示的是对话内容
         messageElement.className = 'message';
         historyContainer.appendChild(messageElement);
     });
 }
+
+// 加载历史会话列表
+function loadHistory() {
+    axios.get('/chat/history/list')
+        .then(response => {
+            const historyList = document.getElementById('history-list');
+            historyList.innerHTML = ''; // 清空现有内容
+
+            response.data.records.forEach(record => {
+                const listItem = document.createElement('li');
+                listItem.className = 'list-group-item';
+                listItem.textContent = record.timestamp;
+                listItem.onclick = () => {
+                    console.log(`Clicked on conversation with ID: ${record.id}`); // 调试信息
+                    loadConversation(record.id);
+                };
+                historyList.appendChild(listItem);
+            });
+        })
+        .catch(error => {
+            console.error('Failed to load chat history:', error);
+        });
+}
+
+// 加载特定会话
+function loadConversation(conversationId) {
+    console.log(`Loading conversation with ID: ${conversationId}`); // 调试信息
+    axios.get(`/chat/history/${conversationId}`)
+        .then(response => {
+            console.log(`Received conversation data:`, response.data); // 调试信息
+            displayChatHistory(response.data.records); // 确保数据传递给 displayChatHistory 函数
+        })
+        .catch(error => {
+            console.error('Failed to load conversation:', error);
+        });
+}
+
+// 显示历史记录的函数
+function displayChatHistory(records) {
+    const historyContainer = document.getElementById('chat-container');
+    historyContainer.innerHTML = ''; // 清空现有内容
+
+    console.log(`Displaying records:`, records); // 调试信息
+
+    records.forEach(record => {
+        const messageElement = document.createElement('div');
+        messageElement.textContent = record.content; // 确保显示的是对话内容
+        messageElement.className = 'message';
+        historyContainer.appendChild(messageElement);
+    });
+}
+
+// 页面加载时加载历史会话
+window.onload = function() {
+    loadHistory();
+};
