@@ -1,0 +1,9 @@
+/* 添加到你的 <style> 标签中 */
+.message {
+    opacity: 0;
+    transition: opacity 0.5s ease-in-out;
+}
+
+.message.show {
+    opacity: 1;
+}
