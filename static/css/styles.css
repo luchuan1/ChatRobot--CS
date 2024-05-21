@@ -1,7 +1,19 @@
-/* 添加到你的 <style> 标签中 */
+/* styles.css */
 .message {
-    opacity: 0;
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 5px;
     transition: opacity 0.5s ease-in-out;
+}
+
+.user-message {
+    background-color: #d1e7dd;
+    text-align: right;
+}
+
+.ai-message {
+    background-color: #f8d7da;
+    text-align: left;
 }
 
 .message.show {
