@@ -10,8 +10,11 @@ import os
 
 app = Flask(__name__)
 
-# 设置数据库路径指向 instance 目录中的 chat.db 文件
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.instance_path, 'chat.db')
+# 设置数据库路径指向 instance 目录中的数据库文件
+app.config['SQLALCHEMY_BINDS'] = {
+    'users': 'sqlite:///' + os.path.join(app.instance_path, 'user.db'),
+    'chat': 'sqlite:///' + os.path.join(app.instance_path, 'chat.db')
+}
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'your_secret_key_here'
 
@@ -36,19 +39,22 @@ client = OpenAI(
 
 # 定义用户模型
 class User(UserMixin, db.Model):
+    __bind_key__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
 
 # 定义会话模型
 class Conversation(db.Model):
+    __bind_key__ = 'chat'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.String(50), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    chats = db.relationship('Chat', backref='conversation', lazy=True)
+    chats = db.relationship('Chat', backref='conversation', lazy=True, cascade='all, delete-orphan')
 
 # 定义对话记录的模型
 class Chat(db.Model):
+    __bind_key__ = 'chat'
     id = db.Column(db.Integer, primary_key=True)
     conversation_id = db.Column(db.Integer, db.ForeignKey('conversation.id'), nullable=False)
     user_id = db.Column(db.String(50), nullable=False)
@@ -62,10 +68,13 @@ class Chat(db.Model):
     def get_timestamp(self):
         return (self.timestamp + timedelta(hours=8)).strftime('%Y-%m-%d %H:%M:%S')
 
+# 创建所有数据库表
 with app.app_context():
-    db.create_all()
+    db.create_all('users')
+    db.create_all('chat')
     logging.debug("Database tables created")
-    logging.debug(f"Database file path: {os.path.abspath(os.path.join(app.instance_path, 'chat.db'))}")
+    logging.debug(f"User database file path: {os.path.abspath(os.path.join(app.instance_path, 'user.db'))}")
+    logging.debug(f"Chat database file path: {os.path.abspath(os.path.join(app.instance_path, 'chat.db'))}")
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -183,8 +192,10 @@ def delete_record(conversation_id):
 
 @app.route('/delete_all', methods=['POST'])
 def delete_all():
-    db.drop_all()
-    db.create_all()
+    db.drop_all(bind='users')
+    db.drop_all(bind='chat')
+    db.create_all(bind='users')
+    db.create_all(bind='chat')
     logging.debug("All data deleted and tables recreated.")
     return jsonify({'message': 'All data deleted and tables recreated.'})
 
