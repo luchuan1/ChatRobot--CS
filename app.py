@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -7,6 +7,7 @@ import logging
 from openai import OpenAI
 import httpx
 import os
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
@@ -17,9 +18,11 @@ app.config['SQLALCHEMY_BINDS'] = {
 }
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'your_secret_key_here'
+app.config['UPLOAD_FOLDER'] = os.path.join(app.instance_path, 'uploads')
 
 # 确保 instance 文件夹存在
 os.makedirs(app.instance_path, exist_ok=True)
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
@@ -43,6 +46,7 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
+    resume_content = db.Column(db.Text, nullable=True)  # 增加保存简历内容的字段
 
 # 定义会话模型
 class Conversation(db.Model):
@@ -118,13 +122,43 @@ def logout():
 def index():
     return render_template('index.html')
 
+def parse_pdf(file_path):
+    import PyPDF2
+    reader = PyPDF2.PdfReader(file_path)
+    text = ""
+    for page in reader.pages:
+        text += page.extract_text()
+    return text
+
+@app.route('/upload', methods=['POST'])
+@login_required
+def upload():
+    if 'file' not in request.files:
+        flash('No file part')
+        return redirect(request.url)
+    file = request.files['file']
+    if file.filename == '':
+        flash('No selected file')
+        return redirect(request.url)
+    if file:
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(file_path)
+        pdf_text = parse_pdf(file_path)
+        current_user.resume_content = pdf_text
+        db.session.commit()
+        flash('Resume uploaded successfully')
+        return redirect(url_for('index'))
+
 @app.route('/chat', methods=['POST'])
 @login_required
 def chat():
     data = request.get_json()
     user_message = data.get('message')
+    resume_content = current_user.resume_content or "No resume uploaded."
     messages = [
-        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "system", "content": "You're a student who's having an interview, and now I'm going to send you my resume, and I'm going to ask you questions as the interviewer, and you're going to answer my questions in conjunction with your resume"},
+        {"role": "user", "content": "Here is my resume: " + resume_content},
         {"role": "user", "content": user_message}
     ]
     completion = client.chat.completions.create(
