@@ -56,7 +56,7 @@
                         <a class="nav-link" href="/login">Login</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/">Chat</a>
+                        <a class="nav-link" href="/index">Chat</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/logout">Logout</a>
@@ -79,6 +79,10 @@
                 <div id="chat-container" class="d-flex flex-column">
                     <!-- Messages will be displayed here -->
                 </div>
+                <form id="upload-form" class="mb-3" method="POST" enctype="multipart/form-data" action="/upload">
+                    <input type="file" name="file" class="form-control">
+                    <button type="submit" class="btn btn-primary mt-2">Upload Resume</button>
+                </form>
                 <div class="input-group mb-3">
                     <button class="btn btn-primary" onclick="startVoiceRecognition()">Start Voice Input</button>
                     <input type="text" id="input" class="form-control" placeholder="Type your message...">
